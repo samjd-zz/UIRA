@@ -74,46 +74,198 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class UIRACoreEngine(nn.Module):
-    def __init__(self, num_atomic_roots=32, embed_dim=512, num_projections=4):
+class AdamicIsomorphicLoss(nn.Module):
+    """Enforces metric preservation between environment distance d_X and latent distance d_Z."""
+    def __init__(self, c_scale: float = 1.0):
         super().__init__()
-        # 1. Atomic Primitive Roots (Yetzirah Matrix)
+        self.c_scale = c_scale
+
+    def forward(self, z_representations: torch.Tensor, d_x_grounding: torch.Tensor) -> torch.Tensor:
+        # Compute pairwise Euclidean distances in latent space Z -> d_Z(Phi(x_i), Phi(x_j))
+        d_z = torch.cdist(z_representations, z_representations, p=2)
+        
+        # L_iso = E [ | d_Z - c * d_X |^2 ]
+        loss_iso = F.mse_loss(d_z, self.c_scale * d_x_grounding)
+        return loss_iso
+
+
+class YetzirahPermutationEngine(nn.Module):
+    """Compiles representations via tensor-product combinations of atomic root embeddings."""
+    def __init__(self, num_atomic_roots: int = 32, embed_dim: int = 512, root_combination_size: int = 2):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.root_combination_size = root_combination_size
         self.atomic_roots = nn.Parameter(torch.randn(num_atomic_roots, embed_dim))
         
-        # 2. Permutation Combinatorial Transformations
-        self.combinatorial_weights = nn.Linear(embed_dim, embed_dim)
-        
-        # 3. Babel Multi-View Projections (Disentangled Manifolds)
-        self.projections = nn.ModuleList([
-            nn.Linear(embed_dim, embed_dim) for _ in range(num_projections)
-        ])
-        
-        # 4. Adamic Truth Gate / Consensus Head
-        self.consensus_gate = nn.Linear(embed_dim * num_projections, embed_dim)
+        # Project tensor products back down to hidden dimension
+        self.permutation_projection = nn.Linear(embed_dim ** root_combination_size, embed_dim)
 
-    def forward(self, root_indices, distance_matrix_grounding=None):
-        # Step A: Combinatorial Synthesis from Atomic Roots
-        primitives = self.atomic_roots[root_indices]
-        z_adamic = self.combinatorial_weights(primitives)
+    def forward(self, root_tuples: torch.Tensor) -> torch.Tensor:
+        # root_tuples shape: [batch_size, seq_len, root_combination_size]
+        batch_size, seq_len, k = root_tuples.shape
         
-        # Step B: Babel Multi-View Partitioning
-        projected_views = [F.gelu(proj(z_adamic)) for proj in self.projections]
+        # Retrieve root vectors: [batch_size, seq_len, k, embed_dim]
+        selected_roots = self.atomic_roots[root_tuples]
         
-        # Step C: Reconciliation / Cross-Manifold Consensus
-        concatenated_views = torch.cat(projected_views, dim=-1)
-        z_reconciled = self.consensus_gate(concatenated_views)
+        # Calculate Tensor Outer Product across the k root dimensions
+        # For k=2: e_v1 (tensor_prod) e_v2 -> shape [batch, seq, embed_dim * embed_dim]
+        r1 = selected_roots[:, :, 0, :]
+        r2 = selected_roots[:, :, 1, :]
+        tensor_prod = torch.bmm(
+            r1.view(-1, self.embed_dim, 1), 
+            r2.view(-1, 1, self.embed_dim)
+        ).view(batch_size, seq_len, -1)
         
-        # Loss components calculation during training
-        loss_consensus = 0.0
-        for i in range(len(projected_views)):
-            for j in range(i + 1, len(projected_views)):
-                loss_consensus += F.mse_loss(projected_views[i], projected_views[j])
+        # Project hypergraph permutation back to standard latent dimension
+        h_concept = self.permutation_projection(tensor_prod)
+        return h_concept
+
+
+class BabelMultiViewPartitioner(nn.Module):
+    """Projects continuous latent space into K disentangled cognitive sub-manifolds."""
+    def __init__(self, embed_dim: int = 512, num_projections: int = 4):
+        super().__init__()
+        self.num_projections = num_projections
+        self.projections = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(embed_dim, embed_dim),
+                nn.LayerNorm(embed_dim),
+                nn.GELU()
+            ) for _ in range(num_projections)
+        ])
+
+    def forward(self, z: torch.Tensor) -> list[torch.Tensor]:
+        return [proj(z) for proj in self.projections]
+
+
+class UIRAFullArchitecture(nn.Module):
+    """Complete Universal Isomorphic Representation Architecture (UIRA)."""
+    def __init__(
+        self, 
+        num_atomic_roots: int = 32, 
+        embed_dim: int = 512, 
+        num_projections: int = 4,
+        vocab_size: int = 1000,
+        lambda_iso: float = 0.1,
+        lambda_consensus: float = 0.1
+    ):
+        super().__init__()
+        self.lambda_iso = lambda_iso
+        self.lambda_consensus = lambda_consensus
+        
+        # Core Components
+        self.yetzirah_engine = YetzirahPermutationEngine(num_atomic_roots, embed_dim)
+        self.isomorphic_loss_fn = AdamicIsomorphicLoss(c_scale=1.0)
+        self.babel_partitioner = BabelMultiViewPartitioner(embed_dim, num_projections)
+        
+        # Reconciliation Gate
+        self.consensus_gate = nn.Linear(embed_dim * num_projections, embed_dim)
+        
+        # Downstream Task Head (e.g., Autoregressive Token Decoder)
+        self.task_head = nn.Linear(embed_dim, vocab_size)
+
+    def forward(
+        self, 
+        root_tuples: torch.Tensor, 
+        env_distance_matrix: torch.Tensor = None,
+        target_tokens: torch.Tensor = None
+    ) -> dict[str, torch.Tensor]:
+        
+        # 1. Permutation Synthesis (Yetzirah Engine)
+        z_adamic = self.yetzirah_engine(root_tuples)  # [batch, seq, embed_dim]
+        
+        # 2. Compute Isomorphic Metric Loss (Adamic Layer)
+        loss_iso = torch.tensor(0.0, device=z_adamic.device)
+        if env_distance_matrix is not None:
+            # Flatten spatial dims to evaluate pairwise distance on pooled sequence vectors
+            z_pooled = z_adamic.mean(dim=1)
+            loss_iso = self.isomorphic_loss_fn(z_pooled, env_distance_matrix)
+            
+        # 3. Disentangled Sub-Manifold Projections (Babel Partition)
+        views = self.babel_partitioner(z_adamic)  # K tensors of shape [batch, seq, embed_dim]
+        
+        # 4. Cross-Manifold Consensus Invariance Loss
+        loss_consensus = torch.tensor(0.0, device=z_adamic.device)
+        num_views = len(views)
+        for i in range(num_views):
+            for j in range(i + 1, num_views):
+                loss_consensus += F.mse_loss(views[i], views[j])
                 
+        # 5. Truth Gate Reconciliation
+        concat_views = torch.cat(views, dim=-1)
+        z_reconciled = self.consensus_gate(concat_views)
+        
+        # 6. Task Prediction & Autoregressive Loss Calculation
+        logits = self.task_head(z_reconciled)
+        loss_task = torch.tensor(0.0, device=z_adamic.device)
+        if target_tokens is not None:
+            loss_task = F.cross_entropy(logits.view(-1, logits.size(-1)), target_tokens.view(-1))
+            
+        # Total Objective Function: L_UIRA = L_task + λ1 * L_iso + λ2 * L_consensus
+        total_loss = loss_task + (self.lambda_iso * loss_iso) + (self.lambda_consensus * loss_consensus)
+        
         return {
-            "z_grounded": z_reconciled,
-            "loss_consensus": loss_consensus,
-            "views": projected_views
+            "logits": logits,
+            "z_final": z_reconciled,
+            "total_loss": total_loss,
+            "loss_task": loss_task,
+            "loss_iso": loss_iso,
+            "loss_consensus": loss_consensus
         }
+
+
+# ==========================================
+# Functional Execution Script / Verification
+# ==========================================
+if __name__ == "__main__":
+    # Hyperparameters
+    BATCH_SIZE = 4
+    SEQ_LEN = 8
+    EMBED_DIM = 128
+    NUM_ROOTS = 16
+    VOCAB_SIZE = 250
+    
+    # Initialize Model & Optimizer
+    model = UIRAFullArchitecture(
+        num_atomic_roots=NUM_ROOTS, 
+        embed_dim=EMBED_DIM, 
+        num_projections=4,
+        vocab_size=VOCAB_SIZE
+    )
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+
+    # Mock Input Data:
+    # 1. Root Tuples (2 primitive roots per token position)
+    mock_root_tuples = torch.randint(0, NUM_ROOTS, (BATCH_SIZE, SEQ_LEN, 2))
+    
+    # 2. Environment Metric Matrix d_X (Pairwise physical/relational distances)
+    mock_env_distance = torch.rand(BATCH_SIZE, BATCH_SIZE)
+    mock_env_distance = (mock_env_distance + mock_env_distance.T) / 2.0  # Symmetric distance
+    
+    # 3. Target Token IDs for training
+    mock_targets = torch.randint(0, VOCAB_SIZE, (BATCH_SIZE, SEQ_LEN))
+
+    # Single Training Step Simulation
+    optimizer.zero_grad()
+    
+    outputs = model(
+        root_tuples=mock_root_tuples,
+        env_distance_matrix=mock_env_distance,
+        target_tokens=mock_targets
+    )
+    
+    # Backpropagate total loss
+    outputs["total_loss"].backward()
+    optimizer.step()
+
+    # Diagnostics Output
+    print("--- UIRA Pipeline Execution Successful ---")
+    print(f"Total Loss:      {outputs['total_loss'].item():.4f}")
+    print(f"  ├─ Task Loss:      {outputs['loss_task'].item():.4f}")
+    print(f"  ├─ Iso Loss:       {outputs['loss_iso'].item():.4f}")
+    print(f"  └─ Consensus Loss: {outputs['loss_consensus'].item():.4f}")
+    print(f"Output Logits Shape: {outputs['logits'].shape}")
+    
 4. Comparative Architectural Advantage
 Feature Dimension	Standard Transformer	UIRA Architecture
 Embedding Space	Token embeddings initialized arbitrarily on hyper-sphere	Constrained by topological distance to world state (L_iso)

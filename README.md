@@ -3,6 +3,8 @@ Technical Architecture Specification
 Universal Isomorphic Representation Architecture (UIRA)
 A Topology-Preserving, Consensus-Verified Framework for Next-Generation AI Latent Spaces
 
+<img width="1024" height="559" alt="image" src="https://github.com/user-attachments/assets/3f2a8d07-ebeb-4042-9b16-d4d9f0815476" />
+
 https://share.gemini.google/gYibVC5Qu2Ay
 
 Domain:

@@ -4,17 +4,21 @@
 
 *A Topology-Preserving, Consensus-Verified Framework for Next-Generation AI Latent Spaces*
 
+<div align="center">
+
 ---
 
 | Metadata Field | Specification Details |
-| --- | --- |
+| :---: | :---: |
 | **Domain** 🏷️ | Representation Learning / Category Theory |
 | **Paradigm** ⚙️ | Isomorphic Embedding & Hypergraphs |
 | **Status** 🧪 | Theoretical & Algorithmic Formulation |
 | **Audio Theme** 🎵 | [Suno AI Track](https://suno.com/s/SJpCZBfVr9DHxJFy?utm_source=gemini) |
-| **Reference Architecture** 🔗 | [Architecture Diagram](https://github.com/user-attachments/assets/3f2a8d07-ebeb-4042-9b16-d4d9f0815476?utm_source=gemini) | [Shared Model Artifact](https://share.gemini.google/gYibVC5Qu2Ay?utm_source=gemini) |
+| **Reference Architecture** 🔗 | [Architecture Diagram](https://github.com/user-attachments/assets/3f2a8d07-ebeb-4042-9b16-d4d9f0815476?utm_source=gemini)
 
 ---
+
+</div>
 
 ### 📜 Abstract & Theoretical Foundation
 

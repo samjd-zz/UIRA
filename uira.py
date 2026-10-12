@@ -1,6 +1,28 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import argparse
+
+
+def select_device(requested: str = "auto") -> torch.device:
+    if requested == "auto":
+        xpu = getattr(torch, "xpu", None)
+        if xpu is not None and xpu.is_available():
+            return torch.device("xpu")
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        return torch.device("cpu")
+
+    device = torch.device(requested)
+    if device.type == "xpu":
+        xpu = getattr(torch, "xpu", None)
+        if xpu is None or not xpu.is_available():
+            raise RuntimeError("Intel XPU was requested, but no XPU device is available.")
+    elif device.type == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("CUDA was requested, but no CUDA device is available.")
+    elif device.type not in {"cpu", "cuda", "xpu"}:
+        raise ValueError(f"Unsupported device type: {device.type}")
+    return device
 
 class AdamicIsomorphicLoss(nn.Module):
     """Enforces metric preservation between environment distance d_X and latent distance d_Z."""
@@ -146,6 +168,16 @@ class UIRAFullArchitecture(nn.Module):
 # Functional Execution Script / Verification
 # ==========================================
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run a UIRA synthetic training step.")
+    parser.add_argument(
+        "--device",
+        default="auto",
+        choices=("auto", "cpu", "cuda", "xpu"),
+        help="Execution device; auto prefers Intel XPU, then CUDA, then CPU.",
+    )
+    args = parser.parse_args()
+    device = select_device(args.device)
+
     # Hyperparameters
     BATCH_SIZE = 4
     SEQ_LEN = 8
@@ -159,19 +191,23 @@ if __name__ == "__main__":
         embed_dim=EMBED_DIM, 
         num_projections=4,
         vocab_size=VOCAB_SIZE
-    )
+    ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
 
     # Mock Input Data:
     # 1. Root Tuples (2 primitive roots per token position)
-    mock_root_tuples = torch.randint(0, NUM_ROOTS, (BATCH_SIZE, SEQ_LEN, 2))
+    mock_root_tuples = torch.randint(
+        0, NUM_ROOTS, (BATCH_SIZE, SEQ_LEN, 2), device=device
+    )
     
     # 2. Environment Metric Matrix d_X (Pairwise physical/relational distances)
-    mock_env_distance = torch.rand(BATCH_SIZE, BATCH_SIZE)
+    mock_env_distance = torch.rand(BATCH_SIZE, BATCH_SIZE, device=device)
     mock_env_distance = (mock_env_distance + mock_env_distance.T) / 2.0  # Symmetric distance
     
     # 3. Target Token IDs for training
-    mock_targets = torch.randint(0, VOCAB_SIZE, (BATCH_SIZE, SEQ_LEN))
+    mock_targets = torch.randint(
+        0, VOCAB_SIZE, (BATCH_SIZE, SEQ_LEN), device=device
+    )
 
     # Single Training Step Simulation
     optimizer.zero_grad()
@@ -188,6 +224,7 @@ if __name__ == "__main__":
 
     # Diagnostics Output
     print("--- UIRA Pipeline Execution Successful ---")
+    print(f"Device:           {device}")
     print(f"Total Loss:      {outputs['total_loss'].item():.4f}")
     print(f"  ├─ Task Loss:      {outputs['loss_task'].item():.4f}")
     print(f"  ├─ Iso Loss:       {outputs['loss_iso'].item():.4f}")

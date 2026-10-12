@@ -26,6 +26,30 @@ While ancient traditions framed representation through allegory and mysticism, e
 
 Translating these principles into modern representation learning yields the **Universal Isomorphic Representation Architecture (UIRA)**—an AI pre-training and latent-alignment paradigm designed to eliminate hallucination, enforce structural grounding, and optimize multi-view reasoning.
 
+## Getting Started
+
+The runnable prototype requires Python 3.9 or newer. By default, install the CPU build of PyTorch. From the repository root, create and activate a virtual environment, install the dependencies, and run the example:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python uira.py
+```
+
+The script automatically selects an available Intel XPU, CUDA device, or CPU in that order. You can select a device explicitly with `python uira.py --device xpu`, `--device cuda`, or `--device cpu`.
+
+For an Intel GPU, install the XPU-enabled PyTorch build instead of the default CPU build:
+
+```bash
+python -m pip install -r requirements-xpu.txt
+python uira.py --device xpu
+```
+
+Intel XPU execution requires a supported Intel GPU and the host Intel GPU driver. See the [official PyTorch Intel GPU prerequisites](https://docs.pytorch.org/docs/stable/notes/get_start_xpu.html#software-prerequisite). GPU access is provided by the host driver; Docker does not replace that driver or expose an unavailable GPU.
+
+The example runs one synthetic training step and prints the selected device, losses, and output shape. The architecture is a research prototype; theoretical goals in this document are not claims of verified production behavior.
+
 ---
 
 ## 1. 🏗️ Architectural Pipeline Overview

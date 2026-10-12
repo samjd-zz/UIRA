@@ -2,10 +2,12 @@
 
 ## 🌌 Universal Isomorphic Representation Architecture (UIRA)
 
-[![License: MIT](https://img.shields.io/github/license/samjd-zz/UIRA)](LICENSE)
-[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue)](#getting-started)
-[![PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c)](https://pytorch.org/)
-[![Intel XPU: experimental](https://img.shields.io/badge/Intel%20XPU-experimental-orange)](https://docs.pytorch.org/docs/stable/notes/get_start_xpu.html)
+<p align="center">
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/samjd-zz/UIRA" alt="License: MIT"></a>
+    <a href="#getting-started"><img src="https://img.shields.io/badge/Python-3.9%2B-blue" alt="Python 3.9+"></a>
+    <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c" alt="PyTorch 2.0+"></a>
+    <a href="https://docs.pytorch.org/docs/stable/notes/get_start_xpu.html"><img src="https://img.shields.io/badge/Intel%20XPU-experimental-orange" alt="Intel XPU: experimental"></a>
+</p>
 
 *A Topology-Preserving, Consensus-Verified Framework for Next-Generation AI Latent Spaces*
 

@@ -55,6 +55,16 @@ python uira.py --device xpu
 
 Intel XPU execution requires a supported Intel GPU and the host Intel GPU driver. See the [official PyTorch Intel GPU prerequisites](https://docs.pytorch.org/docs/stable/notes/get_start_xpu.html#software-prerequisite). GPU access is provided by the host driver; Docker does not replace that driver or expose an unavailable GPU.
 
+For Intel Iris Xe under WSL 2, PyTorch DirectML is an experimental alternative. It requires Windows 11 build 22000 or later and a current Windows GPU driver. The DirectML package is a preview and pins an older PyTorch version, so install it in a separate environment:
+
+```bash
+python3 -m venv .venv-directml
+.venv-directml/bin/python -m pip install -r requirements-directml.txt
+.venv-directml/bin/python -c "import torch, torch_directml; device = torch_directml.device(); value = torch.ones(2, device=device); print(device, value)"
+```
+
+The tensor check must succeed before attempting model execution. DirectML is not yet integrated into the example's `--device` options; the current WSL host fails this initial allocation, so GPU execution has not been verified. See Microsoft's [PyTorch DirectML on WSL guide](https://learn.microsoft.com/windows/ai/directml/pytorch-wsl).
+
 The example runs one synthetic training step and prints the selected device, losses, and output shape. The architecture is a research prototype; theoretical goals in this document are not claims of verified production behavior.
 
 ---

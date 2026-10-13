@@ -1,4 +1,5 @@
 .venv/
+.venv-directml/
 __pycache__/
 *.py[cod]
 .pytest_cache/

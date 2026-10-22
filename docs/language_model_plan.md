@@ -2,14 +2,14 @@
 
 Date: 2026-10-22
 
-Status: Phase 1 implemented and validated; Phases 2-6 remain pending.
+Status: Phases 1-2 implemented and validated; Phases 3-6 remain pending.
 
 ## Implementation Progress
 
 | Phase | Status | Evidence |
 | --- | --- | --- |
 | P1: Text encoding and compatibility | Complete | `text_encoding.py`, class-owned synthetic example, and 59 passing unit tests |
-| P2: Causal context | Pending | No sequence model implemented yet |
+| P2: Causal context | Complete | Opt-in PyTorch causal stack; masking, gradients, causality, and prefix-learning checks |
 | P3: Language training/checkpoints | Pending | Synthetic example only |
 | P4: Generation | Pending | No generation loop |
 | P5: Conversation training | Pending | Reserved role IDs only; no conversation pipeline |
@@ -31,7 +31,36 @@ Status: Phase 1 implemented and validated; Phases 2-6 remain pending.
   survive state-dict reload. All 263 token IDs have unique root pairs.
 - NumPy vectorizes byte preprocessing; PyTorch performs root lookup on-device.
   No authenticated external API, training corpus, or benchmark is required.
-- Next task: T004, followed by T005 and the P2 causality/padding acceptance gate.
+- Phase 1 handed off to T004-T005, now completed below.
+
+### Phase 2 validation (2026-10-22)
+
+- Added tests first; collection initially failed because `sequence_model.py`
+  did not exist. Implemented T004-T005 using existing PyTorch
+  `TransformerEncoderLayer` modules, independently initialized per layer.
+- `.venv/bin/python -m pytest tests/test_sequence_model.py tests/test_contextual_uira.py tests/test_text_encoding.py tests/test_uira.py -q`:
+  **100 passed, 10 skipped** in the CPU environment (PyTorch 2.14.1+cpu).
+  CUDA/XPU device-and-dtype checks were skipped because hardware is unavailable.
+  The editor test tool did not discover the files; direct pytest was used.
+- Validated future-token isolation in both evaluation and inference modes
+  (`atol=1e-6`, `rtol=1e-5`), learned positions, context dependence, variable
+  right-padded batches, masked metric/consensus/task losses, state-dict reload,
+  float32/float64 propagation, and finite gradients throughout the model.
+- A seeded two-example prefix-dependent task achieved task cross-entropy below
+  0.05 and both correct predictions after 100 AdamW steps. This is a mechanics
+  check, not evidence of language understanding or held-out generalization.
+- Rejects all-padding/empty/overlength sequences, non-boolean or non-right-padded
+  masks, mismatched contextual widths, invalid labels, unsupervised-only
+  target batches, and broadcastable-but-incorrect distance matrix shapes.
+- `.venv/bin/python uira.py --device cpu`: preserved synthetic CLI with finite
+  losses and `[4, 8, 250]` logits. Legacy state dictionaries contain no contextual
+  parameters unless enabled. No new dependencies were necessary for Phase 2.
+- All Python source/test files remain below 600 total lines.
+- `git diff --check`, local documentation links, code fences, and the README
+  text-to-context example passed. All Python files parse with Python 3.9 syntax;
+  runtime validation was on Python 3.12, not every supported interpreter.
+- Next task: T006 (licensed local corpus preparation and shifted batches),
+  followed by T007-T008 and the P3 training/checkpoint acceptance gate.
 
 ## Goal and Scope
 
@@ -111,8 +140,9 @@ available and report untested devices explicitly. Keep accelerator distributions
 in their existing separate requirements files.
 
 Phase 1 adds NumPy runtime and pytest development requirements, text encoding,
-and a compatibility-preserving class refactor. Other proposed paths/interfaces
-remain future work. Every subsequent phase requires unit tests, targeted
+and a compatibility-preserving class refactor. Phase 2 adds opt-in contextual
+processing and padding-aware losses. Other proposed paths/interfaces remain
+future work. Every subsequent phase requires unit tests, targeted
 validation, and a progress entry before tasks are marked complete.
 
 ### Required Class Ownership
@@ -171,8 +201,18 @@ explicitly, not treated as bytes.
 
 Requirements: REQ-002, REQ-006. Prerequisites: P1.
 
-- [ ] T004 [Plan:P2] Add `CausalSequenceProcessor(nn.Module)` in `sequence_model.py` with configurable layers, heads, width, dropout, maximum length, learned positions, causal masking, and right-padding support.
-- [ ] T005 [Plan:P2] Wire the optional processor and attention mask into `UIRAFullArchitecture` in `uira.py`. Keep the legacy path unchanged by default and preserve existing output keys. Exclude padding from sequence pooling and view-agreement loss on the new path.
+- [x] T004 [Plan:P2] Add `CausalSequenceProcessor(nn.Module)` in `sequence_model.py` with configurable layers, heads, width, dropout, maximum length, learned positions, causal masking, and right-padding support.
+- [x] T005 [Plan:P2] Wire the optional processor and attention mask into `UIRAFullArchitecture` in `uira.py`. Keep the legacy path unchanged by default and preserve existing output keys. Exclude padding from sequence pooling and view-agreement loss on the new path.
+
+Implemented interface: pass `sequence_config=SequenceConfig(...)` at construction
+with a width matching `embed_dim`. Pass optional boolean `attention_mask` of
+shape `[B, T]`, where True means valid and padding is on the right. Without a
+mask, all positions are valid. Masks require contextual mode. Callers prepare
+shifted next-token targets; the model does not shift labels. Padding targets are
+ignored regardless of their supplied values; valid `-100` targets are also
+ignored. Padded `z_final` states are zero, but padded logits can contain head
+bias and must not be consumed as predictions. Invalid root IDs remain errors
+even in padding slots; use valid PAD root pairs.
 
 Acceptance: logits are `[B, T, V]`; finite CPU forward/backward results reach
 roots, projections, contextual layers, and head. In evaluation mode, changing
@@ -270,8 +310,8 @@ in agreement loss alone is not a success criterion.
 
 ## Proposed File Layout
 
-`text_encoding.py`, `uira.py`, and the Phase 1 unit tests now exist. The remaining
-language-model modules below are proposed:
+`text_encoding.py`, `sequence_model.py`, `uira.py`, and the Phase 1-2 unit tests
+now exist. The remaining language-model modules below are proposed:
 
 ```text
 uira.py                 existing core + opt-in contextual composition

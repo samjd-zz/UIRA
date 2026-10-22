@@ -42,10 +42,10 @@ The [PyTorch implementation](./uira.py) is a real trainable neural network, but 
 | Metric matching | MSE between pairwise distances of pooled representations and a supplied matrix | Meaning depends on the supplied metric; matching distances does not prove an isomorphism or causal understanding |
 | Multiple views | Independent Linear/LayerNorm/GELU projections | No explicit temporal, spatial, or logical specialization |
 | Reconciliation | Pairwise view-agreement loss and a linear merge | Agreement is not factual verification; views may become redundant |
-| Token scores | A linear head outputs `[batch, sequence, vocabulary]` logits | Each position uses its own root pair; no contextual sequence processing |
+| Token scores | A linear head outputs `[batch, sequence, vocabulary]` logits | Uses preceding context only when the optional sequence processor is enabled |
 | Training example | One optimizer step with random root pairs, targets, and a symmetric random distance matrix | Not a trained checkpoint, meaningful corpus, or capability benchmark; the random matrix is not guaranteed to be a valid metric |
-| Text tokenizer / text-to-root encoder | UTF-8 byte tokenizer, versioned configuration, and deterministic root-pair mapping | Mapping is a symbolic code, not learned semantic roots; no contextual text model yet |
-| Contextual sequence processing | Not implemented | No attention, recurrence, positional encoding, or causal mask |
+| Text tokenizer / text-to-root encoder | UTF-8 byte tokenizer, versioned configuration, and deterministic root-pair mapping | Mapping is a symbolic code, not learned semantic roots |
+| Contextual sequence processing | Opt-in causal Transformer layers, learned positions, and right-padding masks | Mechanics validated on small examples; no real-corpus language training yet |
 | Autoregressive text generation | Not implemented | No prompt encoding, decoding loop, or stopping rules |
 | Instruction following / conversation training | Not implemented | No conversation format, assistant-only training objective, or dialogue dataset |
 
@@ -114,7 +114,41 @@ Text-configured models must use `num_atomic_roots=tokenizer.config.num_atomic_ro
 and `vocab_size=tokenizer.config.vocab_size`, not the synthetic example's 16/250
 settings. Control tokens must be inserted by ID, not recognized from user text.
 Decoding is strict UTF-8; control IDs require explicit `skip_control_tokens=True`.
-No contextual decoder, language-training pipeline, or generation loop is included yet.
+Contextual processing is available as described below; a language-training
+pipeline and generation loop are not implemented yet.
+
+### Causal Context (Phase 2)
+
+[sequence_model.py](./sequence_model.py) provides configurable PyTorch causal
+self-attention after reconciliation and before token scoring. It is disabled
+by default, preserving the existing synthetic example and legacy model weights.
+
+```python
+from sequence_model import SequenceConfig
+from uira import UIRAFullArchitecture
+
+model = UIRAFullArchitecture(
+    num_atomic_roots=tokenizer.config.num_atomic_roots,
+    vocab_size=tokenizer.config.vocab_size,
+    embed_dim=64,
+    sequence_config=SequenceConfig(embed_dim=64),
+)
+attention_mask = torch.ones(root_pairs.shape[:2], dtype=torch.bool)
+outputs = model(root_pairs, attention_mask=attention_mask)
+assert outputs["logits"].shape == (1, len(token_ids), 263)
+```
+
+The snippet continues the Phase 1 example. Boolean masks use True for valid
+tokens and False for right-padding; omitting a mask treats all positions as
+valid. Metric pooling, view agreement, and task loss ignore padding. Contextual
+states at padding positions are zero, but padded logits must still be ignored.
+Each sequence must have a valid first token. Empty, all-padding, overlength,
+and left/interior-padded sequences are rejected explicitly. Token/root IDs,
+masks, and model parameters must be on the same device.
+
+For task loss, callers supply `[batch, sequence]` int64 targets already shifted
+for next-token prediction; `-100` means ignore. No generation loop or training
+CLI is implied by this tensor interface.
 
 ### Unit Tests
 
@@ -125,9 +159,10 @@ python -m pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-The Phase 1 suite covers Unicode round trips, configuration validation/persistence,
+The Phase 1-2 suite covers Unicode round trips, configuration validation/persistence,
 all token-to-root mappings, invalid inputs, legacy objective equivalence,
-device selection, dtype propagation, and model gradients. Accelerator checks
+device selection, dtype propagation, model gradients, causal isolation,
+prefix-dependent learning, masked losses, and contextual state reload. Accelerator checks
 are skipped explicitly when hardware is unavailable. NumPy is included in each
 runtime requirements variant; the experimental older DirectML stack uses NumPy
 below 2 for compatibility.
@@ -136,7 +171,7 @@ below 2 for compatibility.
 
 ## 1. 🏗️ Architectural Pipeline Overview
 
-The following is the research formulation, not a claim of verified cognitive capabilities. The implemented order is root composition, optional distance loss on pooled compositions, learned projections, linear reconciliation, and token scoring.
+The following is the research formulation, not a claim of verified cognitive capabilities. The implemented order is root composition, optional distance loss on pooled compositions, learned projections, linear reconciliation, optional causal contextual processing, and token scoring.
 
 1. **🎯 Isomorphic Grounding Layer (Adamic Encoder)**
 
@@ -454,6 +489,6 @@ if __name__ == "__main__":
 | Does metric matching improve structural generalization? | Distance MSE against supplied relationships | Held-out distortion and downstream performance against a no-metric-loss baseline |
 | Does root composition improve unseen combinations? | Pairwise tensor products | Composition-held-out split and a parameter/compute-accounted embedding baseline |
 | Do multiple views help? | Learned projections plus agreement loss | Single-view and no-agreement ablations; view-diversity measurements |
-| Can UIRA learn contextual language behavior? | Not implemented | Causal sequence model, real training data, held-out next-token evaluation, and generation |
+| Can UIRA learn contextual language behavior? | Causal stack and small prefix-learning mechanics check | Real training data, held-out next-token evaluation, and generation |
 
 No comparative advantage over Transformers or deployed language models has been established.

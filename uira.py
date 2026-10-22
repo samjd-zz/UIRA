@@ -4,6 +4,8 @@ import torch.nn.functional as F
 import argparse
 from typing import Optional, Sequence
 
+from sequence_model import CausalSequenceProcessor, SequenceConfig
+
 
 class DeviceSelector:
     def select(self, requested: str = "auto") -> torch.device:
@@ -120,11 +122,17 @@ class UIRAFullArchitecture(nn.Module):
         num_projections: int = 4,
         vocab_size: int = 1000,
         lambda_iso: float = 0.1,
-        lambda_consensus: float = 0.1
+        lambda_consensus: float = 0.1,
+        sequence_config: Optional[SequenceConfig] = None
     ):
         super().__init__()
         self.lambda_iso = lambda_iso
         self.lambda_consensus = lambda_consensus
+        if sequence_config is not None and sequence_config.embed_dim != embed_dim:
+            raise ValueError("sequence_config.embed_dim must match the model embed_dim.")
+        self.sequence_processor = (
+            CausalSequenceProcessor(sequence_config) if sequence_config is not None else None
+        )
         
         # Core Components
         self.yetzirah_engine = YetzirahPermutationEngine(num_atomic_roots, embed_dim)
@@ -134,24 +142,38 @@ class UIRAFullArchitecture(nn.Module):
         # Reconciliation Gate
         self.consensus_gate = nn.Linear(embed_dim * num_projections, embed_dim)
         
-        # Downstream Task Head (e.g., Autoregressive Token Decoder)
+        # Contextual token scores only when sequence processing is enabled.
         self.task_head = nn.Linear(embed_dim, vocab_size)
 
     def forward(
         self, 
         root_tuples: torch.Tensor, 
         env_distance_matrix: Optional[torch.Tensor] = None,
-        target_tokens: Optional[torch.Tensor] = None
+        target_tokens: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None
     ) -> dict[str, torch.Tensor]:
         
-        # 1. Permutation Synthesis (Yetzirah Engine)
+        if self.sequence_processor is None and attention_mask is not None:
+            raise ValueError("attention_mask requires contextual processing via sequence_config.")
         z_adamic = self.yetzirah_engine(root_tuples)  # [batch, seq, embed_dim]
+        valid = (
+            self.sequence_processor.validate_attention_mask(z_adamic, attention_mask)
+            if self.sequence_processor is not None else None
+        )
         
         # 2. Compute Isomorphic Metric Loss (Adamic Layer)
         loss_iso = z_adamic.new_zeros(())
         if env_distance_matrix is not None:
-            # Flatten spatial dims to evaluate pairwise distance on pooled sequence vectors
-            z_pooled = z_adamic.mean(dim=1)
+            batch_size = z_adamic.size(0)
+            if env_distance_matrix.shape != (batch_size, batch_size):
+                raise ValueError("Environment distance matrix must have shape [batch, batch].")
+            if env_distance_matrix.device != z_adamic.device:
+                raise ValueError("Environment distance matrix and model must be on the same device.")
+            if valid is None:
+                z_pooled = z_adamic.mean(dim=1)
+            else:
+                z_pooled = (z_adamic * valid.unsqueeze(-1)).sum(dim=1)
+                z_pooled = z_pooled / valid.sum(dim=1, keepdim=True)
             loss_iso = self.isomorphic_loss_fn(z_pooled, env_distance_matrix)
             
         # 3. Disentangled Sub-Manifold Projections (Babel Partition)
@@ -162,17 +184,36 @@ class UIRAFullArchitecture(nn.Module):
         num_views = len(views)
         for i in range(num_views):
             for j in range(i + 1, num_views):
-                loss_consensus += F.mse_loss(views[i], views[j])
+                loss_consensus += F.mse_loss(
+                    views[i] if valid is None else views[i][valid],
+                    views[j] if valid is None else views[j][valid],
+                )
                 
         # 5. Linear multi-view reconciliation, not factual verification
         concat_views = torch.cat(views, dim=-1)
         z_reconciled = self.consensus_gate(concat_views)
+        if self.sequence_processor is not None:
+            z_reconciled = self.sequence_processor(z_reconciled, valid)
         
         # 6. Per-position token prediction
         logits = self.task_head(z_reconciled)
         loss_task = z_adamic.new_zeros(())
         if target_tokens is not None:
-            loss_task = F.cross_entropy(logits.view(-1, logits.size(-1)), target_tokens.view(-1))
+            if target_tokens.shape != root_tuples.shape[:2]:
+                raise ValueError("target_tokens must have shape [batch, sequence].")
+            if target_tokens.dtype != torch.long:
+                raise TypeError("target_tokens must have int64 dtype.")
+            if target_tokens.device != logits.device:
+                raise ValueError("target_tokens and logits must be on the same device.")
+            labels = target_tokens if valid is None else target_tokens.masked_fill(~valid, -100)
+            supervised = labels != -100
+            if not supervised.any():
+                raise ValueError("target_tokens must contain at least one supervised target.")
+            if torch.any(labels[supervised] < 0) or torch.any(labels[supervised] >= logits.size(-1)):
+                raise ValueError("target_tokens contain an index outside the vocabulary.")
+            loss_task = F.cross_entropy(
+                logits.reshape(-1, logits.size(-1)), labels.reshape(-1)
+            )
             
         # Total Objective Function: L_UIRA = L_task + λ1 * L_iso + λ2 * L_consensus
         total_loss = loss_task + (self.lambda_iso * loss_iso) + (self.lambda_consensus * loss_consensus)

@@ -2,9 +2,8 @@
 
 ## 🌌 Universal Isomorphic Representation Architecture (UIRA)
 
-**Version:** `alpha-v0.0.0.1`
-
 <p align="center">
+    <img src="https://img.shields.io/badge/version-alpha--v0.0.0.1-orange" alt="Version: alpha-v0.0.0.1">
     <a href="LICENSE"><img src="https://img.shields.io/github/license/samjd-zz/UIRA" alt="License: MIT"></a>
     <a href="#getting-started"><img src="https://img.shields.io/badge/Python-3.9%2B-blue" alt="Python 3.9+"></a>
     <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c" alt="PyTorch 2.0+"></a>

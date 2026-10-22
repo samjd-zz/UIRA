@@ -16,6 +16,7 @@ UIRA is a research prototype of a PyTorch representation-learning architecture. 
 - Keep `forward` methods focused on tensor computation. Put setup and configuration in constructors; keep training loops, data loading, and command-line behavior outside model components.
 - Preserve configurable constructor options and make their behavior match their names. Avoid silently hard-coding dimensions or assumptions that conflict with a public parameter.
 - Use descriptive names and type annotations. Document non-obvious tensor dimensions at the operation where they matter.
+- Keep every Python source and test file below 600 total lines (maximum 599, including comments and blank lines). Check line counts before completing changes; split growing files into cohesive modules/classes rather than compressing code or removing useful documentation to meet the limit.
 
 ## PyTorch and Validation
 
@@ -23,7 +24,10 @@ UIRA is a research prototype of a PyTorch representation-learning architecture. 
 - Keep model parameters and all tensors on the selected device. The example should support Intel XPU, CUDA, and CPU fallback without hard-coding tensor placement.
 - Validate input shape assumptions when a mismatch could otherwise produce a confusing broadcasting or indexing error.
 - When changing model behavior, verify output shapes, finite loss values, and that a backward pass produces gradients on a small CPU example. Run the same smoke check on accelerator hardware when available.
-- Keep dependencies in `requirements.txt`. Do not add a dependency for functionality already provided by Python or PyTorch.
+- Add or update proper pytest unit tests for every new capability and bug fix. Cover normal behavior, invalid inputs, boundary cases, serialization, and device/dtype behavior where relevant. Write failing tests before implementation, run the targeted suite, and record results in the implementation plan before marking tasks complete.
+- Reuse maintained, performant libraries rather than recreating established tools. Use NumPy for suitable CPU array/byte preprocessing and PyTorch for model/device tensor operations; avoid NumPy conversions inside accelerator forward paths.
+- Consider scikit-learn for conventional ML baselines/metrics and maintained BM25 libraries for retrieval when those features are implemented. Do not add unused packages or claim a library is fastest without workload-specific evidence.
+- Keep runtime dependencies in `requirements.txt` and test dependencies in `requirements-dev.txt`. Prefer functionality already provided by an existing dependency; add libraries only for a concrete implemented need and verify compatibility with supported Python/PyTorch versions.
 - Keep accelerator-specific PyTorch distributions in separate requirements files so CPU users do not download unrelated GPU runtimes.
 - Set up a local environment with `python3 -m venv .venv`, activate it, then run `python -m pip install -r requirements.txt`.
 - Run the example with `python uira.py` from the repository root.

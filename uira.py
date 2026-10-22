@@ -2,27 +2,33 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import argparse
+from typing import Optional, Sequence
+
+
+class DeviceSelector:
+    def select(self, requested: str = "auto") -> torch.device:
+        if requested == "auto":
+            xpu = getattr(torch, "xpu", None)
+            if xpu is not None and xpu.is_available():
+                return torch.device("xpu")
+            if torch.cuda.is_available():
+                return torch.device("cuda")
+            return torch.device("cpu")
+
+        device = torch.device(requested)
+        if device.type == "xpu":
+            xpu = getattr(torch, "xpu", None)
+            if xpu is None or not xpu.is_available():
+                raise RuntimeError("Intel XPU was requested, but no XPU device is available.")
+        elif device.type == "cuda" and not torch.cuda.is_available():
+            raise RuntimeError("CUDA was requested, but no CUDA device is available.")
+        elif device.type not in {"cpu", "cuda", "xpu"}:
+            raise ValueError(f"Unsupported device type: {device.type}")
+        return device
 
 
 def select_device(requested: str = "auto") -> torch.device:
-    if requested == "auto":
-        xpu = getattr(torch, "xpu", None)
-        if xpu is not None and xpu.is_available():
-            return torch.device("xpu")
-        if torch.cuda.is_available():
-            return torch.device("cuda")
-        return torch.device("cpu")
-
-    device = torch.device(requested)
-    if device.type == "xpu":
-        xpu = getattr(torch, "xpu", None)
-        if xpu is None or not xpu.is_available():
-            raise RuntimeError("Intel XPU was requested, but no XPU device is available.")
-    elif device.type == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError("CUDA was requested, but no CUDA device is available.")
-    elif device.type not in {"cpu", "cuda", "xpu"}:
-        raise ValueError(f"Unsupported device type: {device.type}")
-    return device
+    return DeviceSelector().select(requested)
 
 class AdamicIsomorphicLoss(nn.Module):
     """Enforces metric preservation between environment distance d_X and latent distance d_Z."""
@@ -43,6 +49,12 @@ class YetzirahPermutationEngine(nn.Module):
     """Compiles representations via tensor-product combinations of atomic root embeddings."""
     def __init__(self, num_atomic_roots: int = 32, embed_dim: int = 512, root_combination_size: int = 2):
         super().__init__()
+        if type(root_combination_size) is not int or root_combination_size != 2:
+            raise ValueError("Only root_combination_size=2 is supported.")
+        if type(num_atomic_roots) is not int or num_atomic_roots <= 0:
+            raise ValueError("num_atomic_roots must be a positive integer.")
+        if type(embed_dim) is not int or embed_dim <= 0:
+            raise ValueError("embed_dim must be a positive integer.")
         self.embed_dim = embed_dim
         self.root_combination_size = root_combination_size
         self.atomic_roots = nn.Parameter(torch.randn(num_atomic_roots, embed_dim))
@@ -52,6 +64,17 @@ class YetzirahPermutationEngine(nn.Module):
 
     def forward(self, root_tuples: torch.Tensor) -> torch.Tensor:
         # root_tuples shape: [batch_size, seq_len, root_combination_size]
+        if (
+            root_tuples.ndim != 3 or root_tuples.shape[-1] != 2
+            or any(size == 0 for size in root_tuples.shape)
+        ):
+            raise ValueError("root_tuples must have nonempty shape [batch, sequence, 2].")
+        if root_tuples.dtype not in (torch.int32, torch.int64):
+            raise TypeError("root_tuples must have int32 or int64 dtype.")
+        if root_tuples.device != self.atomic_roots.device:
+            raise ValueError("root_tuples and model parameters must be on the same device.")
+        if torch.any(root_tuples < 0) or torch.any(root_tuples >= self.atomic_roots.size(0)):
+            raise ValueError("root_tuples contain an index outside the root vocabulary.")
         batch_size, seq_len, k = root_tuples.shape
         
         # Retrieve root vectors: [batch_size, seq_len, k, embed_dim]
@@ -62,9 +85,9 @@ class YetzirahPermutationEngine(nn.Module):
         r1 = selected_roots[:, :, 0, :]
         r2 = selected_roots[:, :, 1, :]
         tensor_prod = torch.bmm(
-            r1.view(-1, self.embed_dim, 1), 
-            r2.view(-1, 1, self.embed_dim)
-        ).view(batch_size, seq_len, -1)
+            r1.reshape(-1, self.embed_dim, 1),
+            r2.reshape(-1, 1, self.embed_dim)
+        ).reshape(batch_size, seq_len, -1)
         
         # Project hypergraph permutation back to standard latent dimension
         h_concept = self.permutation_projection(tensor_prod)
@@ -117,15 +140,15 @@ class UIRAFullArchitecture(nn.Module):
     def forward(
         self, 
         root_tuples: torch.Tensor, 
-        env_distance_matrix: torch.Tensor = None,
-        target_tokens: torch.Tensor = None
+        env_distance_matrix: Optional[torch.Tensor] = None,
+        target_tokens: Optional[torch.Tensor] = None
     ) -> dict[str, torch.Tensor]:
         
         # 1. Permutation Synthesis (Yetzirah Engine)
         z_adamic = self.yetzirah_engine(root_tuples)  # [batch, seq, embed_dim]
         
         # 2. Compute Isomorphic Metric Loss (Adamic Layer)
-        loss_iso = torch.tensor(0.0, device=z_adamic.device)
+        loss_iso = z_adamic.new_zeros(())
         if env_distance_matrix is not None:
             # Flatten spatial dims to evaluate pairwise distance on pooled sequence vectors
             z_pooled = z_adamic.mean(dim=1)
@@ -135,19 +158,19 @@ class UIRAFullArchitecture(nn.Module):
         views = self.babel_partitioner(z_adamic)  # K tensors of shape [batch, seq, embed_dim]
         
         # 4. Cross-Manifold Consensus Invariance Loss
-        loss_consensus = torch.tensor(0.0, device=z_adamic.device)
+        loss_consensus = z_adamic.new_zeros(())
         num_views = len(views)
         for i in range(num_views):
             for j in range(i + 1, num_views):
                 loss_consensus += F.mse_loss(views[i], views[j])
                 
-        # 5. Truth Gate Reconciliation
+        # 5. Linear multi-view reconciliation, not factual verification
         concat_views = torch.cat(views, dim=-1)
         z_reconciled = self.consensus_gate(concat_views)
         
-        # 6. Task Prediction & Autoregressive Loss Calculation
+        # 6. Per-position token prediction
         logits = self.task_head(z_reconciled)
-        loss_task = torch.tensor(0.0, device=z_adamic.device)
+        loss_task = z_adamic.new_zeros(())
         if target_tokens is not None:
             loss_task = F.cross_entropy(logits.view(-1, logits.size(-1)), target_tokens.view(-1))
             
@@ -164,69 +187,40 @@ class UIRAFullArchitecture(nn.Module):
         }
 
 
-# ==========================================
-# Functional Execution Script / Verification
-# ==========================================
+class SyntheticTrainingExample:
+    def __init__(self, device_selector: Optional[DeviceSelector] = None) -> None:
+        self.device_selector = device_selector if device_selector is not None else DeviceSelector()
+
+    def run(self, argv: Optional[Sequence[str]] = None) -> dict[str, torch.Tensor]:
+        parser = argparse.ArgumentParser(description="Run a UIRA synthetic training step.")
+        parser.add_argument(
+            "--device", default="auto", choices=("auto", "cpu", "cuda", "xpu"),
+            help="Execution device; auto prefers Intel XPU, then CUDA, then CPU.",
+        )
+        device = self.device_selector.select(parser.parse_args(argv).device)
+        batch_size, seq_len, num_roots, vocab_size = 4, 8, 16, 250
+        model = UIRAFullArchitecture(
+            num_atomic_roots=num_roots, embed_dim=128,
+            num_projections=4, vocab_size=vocab_size,
+        ).to(device)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+        root_tuples = torch.randint(0, num_roots, (batch_size, seq_len, 2), device=device)
+        distances = torch.rand(batch_size, batch_size, device=device)
+        distances = (distances + distances.T) / 2.0
+        targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+        optimizer.zero_grad()
+        outputs = model(root_tuples, distances, targets)
+        outputs["total_loss"].backward()
+        optimizer.step()
+        print("--- UIRA Pipeline Execution Successful ---")
+        print(f"Device:           {device}")
+        print(f"Total Loss:      {outputs['total_loss'].item():.4f}")
+        print(f"  ├─ Task Loss:      {outputs['loss_task'].item():.4f}")
+        print(f"  ├─ Iso Loss:       {outputs['loss_iso'].item():.4f}")
+        print(f"  └─ Consensus Loss: {outputs['loss_consensus'].item():.4f}")
+        print(f"Output Logits Shape: {outputs['logits'].shape}")
+        return outputs
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run a UIRA synthetic training step.")
-    parser.add_argument(
-        "--device",
-        default="auto",
-        choices=("auto", "cpu", "cuda", "xpu"),
-        help="Execution device; auto prefers Intel XPU, then CUDA, then CPU.",
-    )
-    args = parser.parse_args()
-    device = select_device(args.device)
-
-    # Hyperparameters
-    BATCH_SIZE = 4
-    SEQ_LEN = 8
-    EMBED_DIM = 128
-    NUM_ROOTS = 16
-    VOCAB_SIZE = 250
-    
-    # Initialize Model & Optimizer
-    model = UIRAFullArchitecture(
-        num_atomic_roots=NUM_ROOTS, 
-        embed_dim=EMBED_DIM, 
-        num_projections=4,
-        vocab_size=VOCAB_SIZE
-    ).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
-
-    # Mock Input Data:
-    # 1. Root Tuples (2 primitive roots per token position)
-    mock_root_tuples = torch.randint(
-        0, NUM_ROOTS, (BATCH_SIZE, SEQ_LEN, 2), device=device
-    )
-    
-    # 2. Environment Metric Matrix d_X (Pairwise physical/relational distances)
-    mock_env_distance = torch.rand(BATCH_SIZE, BATCH_SIZE, device=device)
-    mock_env_distance = (mock_env_distance + mock_env_distance.T) / 2.0  # Symmetric distance
-    
-    # 3. Target Token IDs for training
-    mock_targets = torch.randint(
-        0, VOCAB_SIZE, (BATCH_SIZE, SEQ_LEN), device=device
-    )
-
-    # Single Training Step Simulation
-    optimizer.zero_grad()
-    
-    outputs = model(
-        root_tuples=mock_root_tuples,
-        env_distance_matrix=mock_env_distance,
-        target_tokens=mock_targets
-    )
-    
-    # Backpropagate total loss
-    outputs["total_loss"].backward()
-    optimizer.step()
-
-    # Diagnostics Output
-    print("--- UIRA Pipeline Execution Successful ---")
-    print(f"Device:           {device}")
-    print(f"Total Loss:      {outputs['total_loss'].item():.4f}")
-    print(f"  ├─ Task Loss:      {outputs['loss_task'].item():.4f}")
-    print(f"  ├─ Iso Loss:       {outputs['loss_iso'].item():.4f}")
-    print(f"  └─ Consensus Loss: {outputs['loss_consensus'].item():.4f}")
-    print(f"Output Logits Shape: {outputs['logits'].shape}")
+    SyntheticTrainingExample().run()

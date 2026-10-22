@@ -44,7 +44,7 @@ The [PyTorch implementation](./uira.py) is a real trainable neural network, but 
 | Reconciliation | Pairwise view-agreement loss and a linear merge | Agreement is not factual verification; views may become redundant |
 | Token scores | A linear head outputs `[batch, sequence, vocabulary]` logits | Each position uses its own root pair; no contextual sequence processing |
 | Training example | One optimizer step with random root pairs, targets, and a symmetric random distance matrix | Not a trained checkpoint, meaningful corpus, or capability benchmark; the random matrix is not guaranteed to be a valid metric |
-| Text tokenizer / text-to-root encoder | Not implemented | Inputs must already be integer root pairs |
+| Text tokenizer / text-to-root encoder | UTF-8 byte tokenizer, versioned configuration, and deterministic root-pair mapping | Mapping is a symbolic code, not learned semantic roots; no contextual text model yet |
 | Contextual sequence processing | Not implemented | No attention, recurrence, positional encoding, or causal mask |
 | Autoregressive text generation | Not implemented | No prompt encoding, decoding loop, or stopping rules |
 | Instruction following / conversation training | Not implemented | No conversation format, assistant-only training objective, or dialogue dataset |
@@ -53,7 +53,7 @@ The token-scoring head alone is not an autoregressive decoder. Trainable weights
 
 See the [language-model implementation plan](./docs/language_model_plan.md) for phased work on the four missing language capabilities, acceptance criteria, and evidence required before making stronger claims.
 
-The roadmap requires object-oriented Python: focused model, encoding, dataset, trainer, checkpoint, generator, evaluator, and application classes composed through explicit dependencies. The [repository Copilot instructions](./.github/copilot-instructions.md) establish this requirement for future implementation. Existing procedural example code has not been refactored by this documentation update.
+The roadmap requires object-oriented Python: focused model, encoding, dataset, trainer, checkpoint, generator, evaluator, and application classes composed through explicit dependencies. The [repository Copilot instructions](./.github/copilot-instructions.md) require this design, unit tests, and reuse of suitable maintained libraries. The synthetic example now lives in `SyntheticTrainingExample`; `select_device` remains a compatibility delegate to `DeviceSelector`.
 
 ## Getting Started
 
@@ -88,6 +88,49 @@ python3 -m venv .venv-directml
 The tensor check must succeed before attempting model execution. DirectML is not yet integrated into the example's `--device` options; the current WSL host fails this initial allocation, so GPU execution has not been verified. See Microsoft's [PyTorch DirectML on WSL guide](https://learn.microsoft.com/windows/ai/directml/pytorch-wsl).
 
 The example runs one synthetic training step and prints the selected device, losses, and output shape. The architecture is a research prototype; theoretical goals in this document are not claims of verified production behavior.
+
+### Text Encoding (Phase 1)
+
+[text_encoding.py](./text_encoding.py) provides 256 UTF-8 byte tokens and seven
+explicit control IDs. NumPy handles CPU byte preprocessing; a registered PyTorch
+buffer maps the 263 IDs to unique pairs of 17 roots on the selected device.
+The mapping does not assign semantic meanings to roots.
+
+```python
+import torch
+from text_encoding import ByteTokenizer, TokenToRootEncoder
+
+tokenizer = ByteTokenizer()
+token_ids = tokenizer.encode("Hello, UIRA!")
+assert tokenizer.decode(token_ids) == "Hello, UIRA!"
+encoder = TokenToRootEncoder(tokenizer.config)
+root_pairs = encoder(torch.tensor([token_ids], dtype=torch.long))
+tokenizer.save("tokenizer.json")
+restored = ByteTokenizer.load("tokenizer.json")
+assert restored.config == tokenizer.config
+```
+
+Text-configured models must use `num_atomic_roots=tokenizer.config.num_atomic_roots`
+and `vocab_size=tokenizer.config.vocab_size`, not the synthetic example's 16/250
+settings. Control tokens must be inserted by ID, not recognized from user text.
+Decoding is strict UTF-8; control IDs require explicit `skip_control_tokens=True`.
+No contextual decoder, language-training pipeline, or generation loop is included yet.
+
+### Unit Tests
+
+After installing the runtime requirements in the active virtual environment:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest
+```
+
+The Phase 1 suite covers Unicode round trips, configuration validation/persistence,
+all token-to-root mappings, invalid inputs, legacy objective equivalence,
+device selection, dtype propagation, and model gradients. Accelerator checks
+are skipped explicitly when hardware is unavailable. NumPy is included in each
+runtime requirements variant; the experimental older DirectML stack uses NumPy
+below 2 for compatibility.
 
 ---
 

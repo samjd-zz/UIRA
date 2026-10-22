@@ -2,7 +2,36 @@
 
 Date: 2026-10-22
 
-Status: proposed roadmap; none of the new language capabilities below is implemented by this document.
+Status: Phase 1 implemented and validated; Phases 2-6 remain pending.
+
+## Implementation Progress
+
+| Phase | Status | Evidence |
+| --- | --- | --- |
+| P1: Text encoding and compatibility | Complete | `text_encoding.py`, class-owned synthetic example, and 59 passing unit tests |
+| P2: Causal context | Pending | No sequence model implemented yet |
+| P3: Language training/checkpoints | Pending | Synthetic example only |
+| P4: Generation | Pending | No generation loop |
+| P5: Conversation training | Pending | Reserved role IDs only; no conversation pipeline |
+| P6: Comparative evaluation | Pending | No language-quality results claimed |
+
+### Phase 1 validation (2026-10-22)
+
+- Tests were written first and initially failed collection because the new
+  encoding module and application classes did not exist.
+- `.venv/bin/python -m pytest tests/test_text_encoding.py tests/test_uira.py -q`:
+  **59 passed, 2 skipped**. CUDA/XPU integration checks were skipped because
+  those devices were unavailable; CPU forward/backward and float64 propagation
+  passed. The editor test runner did not discover pytest tests, so the suite
+  was executed explicitly in the repository virtual environment.
+- `.venv/bin/python uira.py --device cpu`: finite losses and logits shape
+  `[4, 8, 250]`; original CLI and `select_device` compatibility preserved.
+- `git diff --check`: passed.
+- Tokenizer persistence includes the root-count configuration; encoder buffers
+  survive state-dict reload. All 263 token IDs have unique root pairs.
+- NumPy vectorizes byte preprocessing; PyTorch performs root lookup on-device.
+  No authenticated external API, training corpus, or benchmark is required.
+- Next task: T004, followed by T005 and the P2 causality/padding acceptance gate.
 
 ## Goal and Scope
 
@@ -30,8 +59,14 @@ consolidated here rather than spread across additional planning files.
 
 ## Technical Context and Working Decisions
 
-- Keep Python 3.9+ and PyTorch. Use the standard library for byte encoding,
-  configuration, JSONL records, and the initial command-line tools.
+- Keep Python 3.9+ and PyTorch. Use Python UTF-8 encoding plus NumPy vectorized
+  byte-array conversion; use the standard library for configuration, JSONL
+  records, and the initial command-line tools. Use pytest for unit tests.
+- Reuse maintained libraries for implemented needs. Consider scikit-learn for
+  conventional evaluation baselines and maintained BM25 implementations if
+  retrieval is added; neither is currently a dependency because those features
+  are not implemented. Benchmark workload performance before claiming a library
+  is the most performant option.
 - Require object-oriented Python for all application components, not just neural
   layers. Use focused classes, typed public methods, constructor-injected
   collaborators, typed configuration dataclasses, and composition. Module-level
@@ -75,8 +110,10 @@ CPU is the required validation platform; run equivalent checks on CUDA/XPU when
 available and report untested devices explicitly. Keep accelerator distributions
 in their existing separate requirements files.
 
-No dependencies, model behavior, or runnable language commands change in this
-documentation phase. Proposed paths and interfaces below are future work.
+Phase 1 adds NumPy runtime and pytest development requirements, text encoding,
+and a compatibility-preserving class refactor. Other proposed paths/interfaces
+remain future work. Every subsequent phase requires unit tests, targeted
+validation, and a progress entry before tasks are marked complete.
 
 ### Required Class Ownership
 
@@ -120,9 +157,9 @@ new option is enabled.
 
 Requirements: REQ-001, REQ-006. Prerequisites: none.
 
-- [ ] T001 [Plan:P1] Add `text_encoding.py` with `ByteTokenizer.encode/decode`, explicit special-token handling, and a versioned JSON configuration. Ordinary input strings must never be interpreted as role/control tokens.
-- [ ] T002 [Plan:P1] Add `TokenToRootEncoder(nn.Module)` in `text_encoding.py` with a registered integer lookup buffer, vocabulary/capacity checks, and `[B, T] -> [B, T, 2]` conversion on the selected device.
-- [ ] T003 [Plan:P1] Update `uira.py` to validate root-pair shape, integer indices, index range, and supported combination size. Explicitly reject non-pair composition until it is implemented rather than silently accepting an incompatible option. Move the existing device policy and synthetic workflow into `DeviceSelector` and `SyntheticTrainingExample`, preserving `select_device` as a delegate and the current CLI behavior.
+- [x] T001 [Plan:P1] Add `text_encoding.py` with `ByteTokenizer.encode/decode`, explicit special-token handling, and a versioned JSON configuration. Ordinary input strings must never be interpreted as role/control tokens.
+- [x] T002 [Plan:P1] Add `TokenToRootEncoder(nn.Module)` in `text_encoding.py` with a registered integer lookup buffer, vocabulary/capacity checks, and `[B, T] -> [B, T, 2]` conversion on the selected device.
+- [x] T003 [Plan:P1] Update `uira.py` to validate root-pair shape, integer indices, index range, and supported combination size. Explicitly reject non-pair composition until it is implemented rather than silently accepting an incompatible option. Move the existing device policy and synthetic workflow into `DeviceSelector` and `SyntheticTrainingExample`, preserving `select_device` as a delegate and the current CLI behavior.
 
 Acceptance: empty strings, ASCII, multilingual text, emoji, and literal role-marker
 strings round-trip exactly through byte encoding and strict UTF-8 decoding.
@@ -233,7 +270,8 @@ in agreement loss alone is not a success criterion.
 
 ## Proposed File Layout
 
-All files below except `uira.py`, `README.md`, and this plan are proposed:
+`text_encoding.py`, `uira.py`, and the Phase 1 unit tests now exist. The remaining
+language-model modules below are proposed:
 
 ```text
 uira.py                 existing core + opt-in contextual composition

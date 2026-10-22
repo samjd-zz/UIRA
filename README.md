@@ -9,7 +9,7 @@
     <a href="https://docs.pytorch.org/docs/stable/notes/get_start_xpu.html"><img src="https://img.shields.io/badge/Intel%20XPU-experimental-orange" alt="Intel XPU: experimental"></a>
 </p>
 
-*A Topology-Preserving, Consensus-Verified Framework for Next-Generation AI Latent Spaces*
+*A research prototype for tensor-product composition, metric matching, and multi-view representation learning*
 
 <div align="center">
 
@@ -19,7 +19,7 @@
 | :---: | :---: |
 | **Domain** 🏷️ | Representation Learning / Category Theory |
 | **Paradigm** ⚙️ | Isomorphic Embedding & Hypergraphs |
-| **Status** 🧪 | Theoretical & Algorithmic Formulation |
+| **Status** 🧪 | Runnable synthetic prototype; capabilities not benchmarked |
 | **Audio Theme** 🎵 | [Suno AI Track](https://suno.com/s/SJpCZBfVr9DHxJFy?utm_source=gemini) |
 | **Reference Architecture** 🔗 | [Architecture Diagram](https://github.com/user-attachments/assets/3f2a8d07-ebeb-4042-9b16-d4d9f0815476?utm_source=gemini)
 
@@ -29,9 +29,30 @@
 
 ### 📜 Abstract & Theoretical Foundation
 
-While ancient traditions framed representation through allegory and mysticism, early philologists and Kabbalists were actually observing fundamental properties of combinatorics, category theory, and information topology. Without modern GPU clusters, they correctly intuited that a universal language system requires three foundational pillars: **topological isomorphism** (direct metric mapping to physical reality), **combinatorial synthesis** from atomic roots, and **distributed manifold partitioning**.
+UIRA explores three ideas: composing learned root vectors through tensor products, matching latent distances to externally supplied distances, and reconciling multiple learned projections. Its historical naming is inspiration, not evidence for the mathematical or empirical validity of the architecture.
 
-Translating these principles into modern representation learning yields the **Universal Isomorphic Representation Architecture (UIRA)**—an AI pre-training and latent-alignment paradigm designed to eliminate hallucination, enforce structural grounding, and optimize multi-view reasoning.
+The [PyTorch implementation](./uira.py) is a real trainable neural network, but it is not a pretrained language model or a conversational system comparable to deployed OpenAI models. There is no demonstrated guarantee of grounding, truth verification, hallucination elimination, or superior generalization.
+
+## Current Capabilities and Limitations
+
+| Component | Implemented behavior | Limitation |
+| --- | --- | --- |
+| Root composition | Learned root embeddings combined by a pairwise outer product and linear projection | Roots have no predefined semantic meaning; no explicit hypergraph grammar is implemented |
+| Metric matching | MSE between pairwise distances of pooled representations and a supplied matrix | Meaning depends on the supplied metric; matching distances does not prove an isomorphism or causal understanding |
+| Multiple views | Independent Linear/LayerNorm/GELU projections | No explicit temporal, spatial, or logical specialization |
+| Reconciliation | Pairwise view-agreement loss and a linear merge | Agreement is not factual verification; views may become redundant |
+| Token scores | A linear head outputs `[batch, sequence, vocabulary]` logits | Each position uses its own root pair; no contextual sequence processing |
+| Training example | One optimizer step with random root pairs, targets, and a symmetric random distance matrix | Not a trained checkpoint, meaningful corpus, or capability benchmark; the random matrix is not guaranteed to be a valid metric |
+| Text tokenizer / text-to-root encoder | Not implemented | Inputs must already be integer root pairs |
+| Contextual sequence processing | Not implemented | No attention, recurrence, positional encoding, or causal mask |
+| Autoregressive text generation | Not implemented | No prompt encoding, decoding loop, or stopping rules |
+| Instruction following / conversation training | Not implemented | No conversation format, assistant-only training objective, or dialogue dataset |
+
+The token-scoring head alone is not an autoregressive decoder. Trainable weights and a successful backward pass establish that the computation can be optimized, not that it understands language.
+
+See the [language-model implementation plan](./docs/language_model_plan.md) for phased work on the four missing language capabilities, acceptance criteria, and evidence required before making stronger claims.
+
+The roadmap requires object-oriented Python: focused model, encoding, dataset, trainer, checkpoint, generator, evaluator, and application classes composed through explicit dependencies. The [repository Copilot instructions](./.github/copilot-instructions.md) establish this requirement for future implementation. Existing procedural example code has not been refactored by this documentation update.
 
 ## Getting Started
 
@@ -71,11 +92,11 @@ The example runs one synthetic training step and prints the selected device, los
 
 ## 1. 🏗️ Architectural Pipeline Overview
 
-The UIRA framework transforms unstructured latent representations into topologically grounded, consensus-verified cognitive manifolds through a four-tier processing stack:
+The following is the research formulation, not a claim of verified cognitive capabilities. The implemented order is root composition, optional distance loss on pooled compositions, learned projections, linear reconciliation, and token scoring.
 
 1. **🎯 Isomorphic Grounding Layer (Adamic Encoder)**
 
-$$\Phi : X \longrightarrow Z \quad (\text{Preserves Environment Metric Invariants } d_X \approx d_Z)$$
+$$\Phi : X \longrightarrow Z \quad (\text{Target: } d_X \approx d_Z)$$
 
 2. **🧩 Combinatorial Permutation Engine (Yetzirah Matrix)**
 
@@ -83,11 +104,13 @@ $$H = \sum \left( e_{v_1} \otimes e_{v_2} \otimes \dots \otimes e_{v_k} \right) 
 
 3. **🌐 Multi-View Cognitive Manifolds (Babel Partition)**
 
-$$\pi_1(Z), \pi_2(Z), \dots, \pi_K(Z) \quad (\text{Disentangled Projections: Temporal, Spatial, Logical})$$
+$$\pi_1(Z), \pi_2(Z), \dots, \pi_K(Z) \quad (\text{Learned projections; specialization unverified})$$
 
-4. **⚖️ Distributed Consensus Truth Gate (Reconciliation)**
+4. **⚖️ Multi-View Reconciliation (Historically Called the "Truth Gate")**
 
-$$\mathcal{L}_{\text{UIRA}} = \mathcal{L}_{\text{autoregressive}} + \lambda_1 \mathcal{L}_{\text{iso}} + \lambda_2 \mathcal{L}_{\text{perm}} + \lambda_3 \mathcal{L}_{\text{consensus}}$$
+$$\mathcal{L}_{\text{UIRA}} = \mathcal{L}_{\text{task}} + \lambda_{\text{iso}} \mathcal{L}_{\text{iso}} + \lambda_{\text{consensus}} \mathcal{L}_{\text{consensus}}$$
+
+This is the implemented objective. There is no separate permutation loss or autoregressive training pipeline.
 
 ---
 
@@ -95,7 +118,7 @@ $$\mathcal{L}_{\text{UIRA}} = \mathcal{L}_{\text{autoregressive}} + \lambda_1 \m
 
 ### 2.1 🎯 Isomorphic Semantic Grounding (The Adamic Encoder)
 
-Standard LLMs map arbitrary tokenizations to trainable embeddings, creating fragile symbol-grounding gaps. The Adamic layer enforces an isomorphism constraint: the distance between representations in latent space $Z$ must preserve the structural or causal invariants of the environment $X$.
+The Adamic loss penalizes differences between latent Euclidean distances and an externally supplied reference matrix. It does not construct an environmental metric or establish that the supplied relationships are physical, causal, or semantically valid.
 
 For any two state vectors $x_i, x_j \in X$ and their encoder mapping $\Phi(x): X \to Z$:
 
@@ -103,47 +126,49 @@ $$d_Z(\Phi(x_i), \Phi(x_j)) \approx c \cdot d_X(x_i, x_j)$$
 
 $$\mathcal{L}_{\text{iso}} = \mathbb{E}_{x_i, x_j \sim X} \left[ \left\vert{} d_Z(\Phi(x_i), \Phi(x_j)) - c \cdot d_X(x_i, x_j) \right\vert{}^2 \right]$$
 
-> 💡 **AI Impact:** Eliminates "meaningless token drift" and ensures that terms representing similar physical, causal, or logical relationships remain anchored together in latent topology.
+> **Research hypothesis:** A meaningful reference metric may improve held-out structural generalization. This requires comparison with baselines; low training loss alone is insufficient.
 
 ### 2.2 🧩 Combinatorial Permutation Engine (The Yetzirah Matrix)
 
-Rather than treating vocabulary as a flat dictionary of $\vert{}V\vert{}$ tokens, the system constructs representations from an atomic directed multigraph $G_{\text{atomic}} = (V_{\text{atomic}}, E)$. Complex words and concepts are compiled via tensor-product permutations of fundamental primitive nodes.
+The implementation retrieves two learned root vectors, forms their outer product, and projects it back to the embedding dimension. An explicit atomic directed multigraph and grammar are proposed extensions, not implemented structures.
 
 Given $n$ atomic root embeddings $\{e_{v_1}, e_{v_2}, \dots, e_{v_n}\}$ combined under structural operator $\otimes$:
 
 $$h_{\text{concept}} = \sum_{m \in M} \left( \bigotimes_{k=1}^n e_{v_k} \right) W_m$$
 
-where $M$ represents valid topological permutations allowed by a formal hypergraph grammar.
+In this proposed generalization, $M$ would represent combinations allowed by a formal grammar. The current code implements a single pairwise composition, not this full grammar.
 
-> 💡 **AI Impact:** Achieves zero-shot compositional generalization. The model can construct and comprehend completely novel concepts without ever having encountered a specific word token during training.
+> **Research hypothesis:** Root composition may help generalize to unseen combinations. No zero-shot compositional benchmark is included. The current forward pass supports pairs despite exposing a combination-size constructor option.
 
 ### 2.3 🌐 Multi-View Cognitive Partitioning (The Babel Projections)
 
-Rather than forcing a single Transformer trunk to represent all domains simultaneously—which leads to catastrophic cross-domain interference—the latent space $Z$ is projected into $K$ distinct, non-orthogonal sub-manifolds representing divergent cognitive frameworks (e.g., temporal, spatial, causal, formal-logical).
+The latent representation is passed through $K$ separately parameterized projections. Describing them as temporal, spatial, causal, or logical is an intended interpretation, not an implemented assignment or measured property.
 
 For latent representation $z \in Z$, we define sub-manifold projections $\pi_k$:
 
 $$z_k = \pi_k(z) = \text{LayerNorm}(W_k z + b_k) \quad \text{for } k \in \{1, 2, \dots, K\}$$
 
-Each projection $z_k$ enforces distinct inductive biases (e.g., cardinal coordinates vs. relative spatial relationships, or strict procedural temporal order vs. fluid associative networks).
+The equation is schematic; the implementation also applies GELU after LayerNorm. All views use the same architecture, without distinct domain-specific supervision.
 
-> 💡 **AI Impact:** Disentangled representations prevent localized bias or hallucination in one cognitive domain from corrupting processing in another.
+> **Research hypothesis:** Multiple views may improve representations. Agreement regularization may also reduce view diversity; both effects need measurement.
 
-### 2.4 ⚖️ Distributed Consensus Truth Gate (Cross-Manifold Reconciliation)
+### 2.4 ⚖️ Multi-View Agreement and Reconciliation
 
-The system maintains coherence without forcing a single monolithic narrative by evaluating a **Cross-Manifold Invariance Loss**. Information processing is valid if and only if a proposition $P$ evaluated across disparate cognitive projections $z_k$ preserves its underlying logical truth value $T(P)$:
+The implementation sums mean-squared differences between view tensors, concatenates those tensors, and applies a learned linear layer. It does not evaluate propositions, invoke a logical prover, consult evidence, or reject false statements:
 
-$$\mathcal{L}_{\text{consensus}} = \sum_{i=1}^K \sum_{j=i+1}^K \left\Vert{} \text{Decoder}_i(z_i) - \text{Decoder}_j(z_j) \right\Vert{}_\text{semantic}^2$$
+$$\mathcal{L}_{\text{consensus}} = \sum_{i=1}^K \sum_{j=i+1}^K \operatorname{MSE}(z_i, z_j)$$
 
-The unified objective function during pre-training integrates all structural invariants:
+The current total objective is:
 
-$$\mathcal{L}_{\text{UIRA}} = \mathcal{L}_{\text{autoregressive}} + \lambda_1 \mathcal{L}_{\text{iso}} + \lambda_2 \mathcal{L}_{\text{perm}} + \lambda_3 \mathcal{L}_{\text{consensus}}$$
+$$\mathcal{L}_{\text{UIRA}} = \mathcal{L}_{\text{task}} + \lambda_{\text{iso}} \mathcal{L}_{\text{iso}} + \lambda_{\text{consensus}} \mathcal{L}_{\text{consensus}}$$
 
-> 💡 **AI Impact:** Mathematical truth verification across divergent cognitive frames, creating built-in verification against hallucinations.
+> **Limitation:** Agreement is not truth. These losses do not establish factual accuracy or eliminate hallucinations.
 
 ---
 
 ## 3. 💻 Algorithmic Execution Pipeline
+
+The excerpt below illustrates the original synthetic prototype. Use [uira.py](./uira.py) as the executable source of truth, including its current device-selection CLI. The head produces token scores, not contextual or autoregressive text generation.
 
 ```python
 import torch
@@ -259,7 +284,7 @@ class UIRAFullArchitecture(nn.Module):
             embed_dim * num_projections, embed_dim
         )
 
-        # Downstream Task Head (e.g., Autoregressive Token Decoder)
+        # Per-position token-scoring head; no contextual decoder
         self.task_head = nn.Linear(embed_dim, vocab_size)
 
     def forward(
@@ -291,11 +316,11 @@ class UIRAFullArchitecture(nn.Module):
             for j in range(i + 1, num_views):
                 loss_consensus += F.mse_loss(views[i], views[j])
 
-        # 5. Truth Gate Reconciliation
+        # 5. Linear Multi-View Reconciliation
         concat_views = torch.cat(views, dim=-1)
         z_reconciled = self.consensus_gate(concat_views)
 
-        # 6. Task Prediction & Autoregressive Loss Calculation
+        # 6. Per-Position Task Prediction & Cross-Entropy
         logits = self.task_head(z_reconciled)
         loss_task = torch.tensor(0.0, device=z_adamic.device)
         if target_tokens is not None:
@@ -378,11 +403,19 @@ if __name__ == "__main__":
 
 ---
 
-## 4. 📊 Comparative Architectural Advantage
+## 4. 📊 Research Questions and Evidence Needed
 
-| Feature Dimension 🛠️ | Standard Transformer 🤖 | UIRA Architecture 🌌 |
+| Research question | Current mechanism | Evidence needed |
 | --- | --- | --- |
-| **Embedding Space** | Token embeddings initialized arbitrarily on hyper-sphere | Constrained by topological distance to world state ($\mathcal{L}_{\text{iso}}$) |
-| **Vocabulary Mechanics** | Static lookup dictionary ($\vert{}V\vert{} \approx 32\text{k}\text{--}128\text{k}$) | Dynamic combinatorial hypergraph from atomic primitives |
-| **Trunk Architecture** | Monolithic attention trunk prone to hallucination | Disentangled $K$-manifold projections with consensus gates |
-| **OOD Generalization** | Fails under major distributional shifts | Robust zero-shot algebra via root permutations |
+| Does metric matching improve structural generalization? | Distance MSE against supplied relationships | Held-out distortion and downstream performance against a no-metric-loss baseline |
+| Does root composition improve unseen combinations? | Pairwise tensor products | Composition-held-out split and a parameter/compute-accounted embedding baseline |
+| Do multiple views help? | Learned projections plus agreement loss | Single-view and no-agreement ablations; view-diversity measurements |
+| Can UIRA learn contextual language behavior? | Not implemented | Causal sequence model, real training data, held-out next-token evaluation, and generation |
+
+No comparative advantage over Transformers or deployed language models has been established.
+
+### Optional External Data: Katzilla
+
+[Katzilla](https://katzilla.dev/) advertises structured access to public datasets with citation and freshness metadata. It could support a future, versioned research dataset or evidence-retrieval application, but it is not required for the language-model roadmap and is not a truth-verification component.
+
+Start with one well-defined dataset, compare direct upstream access with Katzilla, and cache licensed snapshots with provenance outside model `forward` methods. Define the observation-to-root encoding and environmental metric before training. Public documentation was reviewed, but authenticated API behavior, reliability, and dataset-specific storage/training permissions have not been verified.

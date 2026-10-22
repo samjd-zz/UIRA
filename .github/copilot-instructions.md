@@ -6,7 +6,12 @@ UIRA is a research prototype of a PyTorch representation-learning architecture. 
 
 ## Design and OOP
 
-- Prefer object-oriented design and composition. Reusable model components should be focused `torch.nn.Module` subclasses, assembled by `UIRAFullArchitecture`.
+- Require object-oriented Python for all new or substantially changed application code, including model components, tokenization, datasets, training, checkpointing, generation, evaluation, and CLI orchestration.
+- Give each responsibility a focused class with typed public methods and explicit constructor dependencies. Prefer composition over inheritance; use inheritance where required by PyTorch interfaces. Do not add empty wrappers, static-method-only utility classes, or unnecessary class hierarchies.
+- Reusable model components must be `torch.nn.Module` subclasses, assembled by `UIRAFullArchitecture`. Dataset implementations should use PyTorch dataset classes; configuration and structured records should use typed dataclasses where appropriate.
+- Put workflows in trainer, generator, evaluator, and application classes rather than procedural scripts or module-level training loops. A module-level `main()` and `if __name__ == "__main__":` block may only construct/delegate to an application class. Small stateless helpers and test functions are allowed; they must not replace class-owned application workflows.
+- Preserve existing public APIs when refactoring procedural code into classes, using thin compatibility wrappers where necessary. Do not perform unrelated rewrites merely to satisfy this rule.
+- For implementation reviews, verify that application responsibilities have class owners, dependencies are explicit, trainable state is registered, and entry points contain no business logic. Follow the class ownership and phase gates in [the language-model plan](../docs/language_model_plan.md).
 - Register trainable parameters and child modules through PyTorch's standard APIs (`nn.Parameter`, module attributes, `nn.ModuleList`, and `nn.Sequential`). Do not keep trainable tensors in ordinary Python containers.
 - Keep `forward` methods focused on tensor computation. Put setup and configuration in constructors; keep training loops, data loading, and command-line behavior outside model components.
 - Preserve configurable constructor options and make their behavior match their names. Avoid silently hard-coding dimensions or assumptions that conflict with a public parameter.

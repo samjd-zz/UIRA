@@ -302,7 +302,7 @@ The equation is schematic; the implementation also applies GELU after LayerNorm.
 
 The implementation sums mean-squared differences between view tensors, concatenates those tensors, and applies a learned linear layer. It does not evaluate propositions, invoke a logical prover, consult evidence, or reject false statements:
 
-$$\mathcal{L}_{\text{consensus}} = \sum_{i=1}^K \sum_{j=i+1}^K \operatorname{MSE}(z_i, z_j)$$
+$$\mathcal{L}_{\text{consensus}} = \sum_{i=1}^K \sum_{j=i+1}^K \mathrm{MSE}(z_i, z_j)$$
 
 The current total objective is:
 

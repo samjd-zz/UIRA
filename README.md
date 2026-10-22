@@ -5,6 +5,7 @@
 <p align="center">
     <img src="https://img.shields.io/badge/version-alpha--v0.0.0.1-orange" alt="Version: alpha-v0.0.0.1">
     <a href="LICENSE"><img src="https://img.shields.io/github/license/samjd-zz/UIRA" alt="License: MIT"></a>
+    <a href="#unit-tests"><img src="https://img.shields.io/badge/tests-155%20passed%20%7C%2012%20skipped-brightgreen" alt="Tests: 155 passed, 12 skipped"></a>
     <a href="#getting-started"><img src="https://img.shields.io/badge/Python-3.9%2B-blue" alt="Python 3.9+"></a>
     <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c" alt="PyTorch 2.0+"></a>
     <a href="https://docs.pytorch.org/docs/stable/notes/get_start_xpu.html"><img src="https://img.shields.io/badge/Intel%20XPU-experimental-orange" alt="Intel XPU: experimental"></a>
@@ -43,9 +44,10 @@ The [PyTorch implementation](./uira.py) is a real trainable neural network, but 
 | Multiple views | Independent Linear/LayerNorm/GELU projections | No explicit temporal, spatial, or logical specialization |
 | Reconciliation | Pairwise view-agreement loss and a linear merge | Agreement is not factual verification; views may become redundant |
 | Token scores | A linear head outputs `[batch, sequence, vocabulary]` logits | Uses preceding context only when the optional sequence processor is enabled |
-| Training example | One optimizer step with random root pairs, targets, and a symmetric random distance matrix | Not a trained checkpoint, meaningful corpus, or capability benchmark; the random matrix is not guaranteed to be a valid metric |
+| Synthetic training example | One optimizer step with random root pairs, targets, and a symmetric random distance matrix | Not a capability benchmark; the random matrix is not guaranteed to be a valid metric |
+| Language training | Local UTF-8 corpus preparation, shifted next-token training, held-out metrics, and versioned checkpoint resume | No pretrained model supplied; bundled toy corpus verifies mechanics, not language quality |
 | Text tokenizer / text-to-root encoder | UTF-8 byte tokenizer, versioned configuration, and deterministic root-pair mapping | Mapping is a symbolic code, not learned semantic roots |
-| Contextual sequence processing | Opt-in causal Transformer layers, learned positions, and right-padding masks | Mechanics validated on small examples; no real-corpus language training yet |
+| Contextual sequence processing | Opt-in causal Transformer layers, learned positions, and right-padding masks | Small CPU mechanics checks passed; no broad language-quality results |
 | Autoregressive text generation | Not implemented | No prompt encoding, decoding loop, or stopping rules |
 | Instruction following / conversation training | Not implemented | No conversation format, assistant-only training objective, or dialogue dataset |
 
@@ -114,8 +116,8 @@ Text-configured models must use `num_atomic_roots=tokenizer.config.num_atomic_ro
 and `vocab_size=tokenizer.config.vocab_size`, not the synthetic example's 16/250
 settings. Control tokens must be inserted by ID, not recognized from user text.
 Decoding is strict UTF-8; control IDs require explicit `skip_control_tokens=True`.
-Contextual processing is available as described below; a language-training
-pipeline and generation loop are not implemented yet.
+Contextual processing and local language training are available as described
+below; a generation loop is not implemented yet.
 
 ### Causal Context (Phase 2)
 
@@ -147,8 +149,63 @@ and left/interior-padded sequences are rejected explicitly. Token/root IDs,
 masks, and model parameters must be on the same device.
 
 For task loss, callers supply `[batch, sequence]` int64 targets already shifted
-for next-token prediction; `-100` means ignore. No generation loop or training
-CLI is implied by this tensor interface.
+for next-token prediction; `-100` means ignore. The training pipeline below
+prepares these labels; the tensor interface does not generate text.
+
+### Next-Token Training and Checkpoints (Phase 3)
+
+[train.py](./train.py) trains on local documents using PyTorch datasets,
+DataLoader, AdamW, and gradient clipping. [training_data.py](./training_data.py)
+deduplicates exact document bytes before a seeded train/validation split, then
+creates windows with one shared predecessor and no repeated supervised targets.
+BOS/EOS are inserted once per document, not at arbitrary window boundaries.
+
+Run a small CPU experiment with the original CC0 toy fixtures:
+
+```bash
+python train.py \
+  --manifest examples/toy_corpus/manifest.jsonl \
+  --output checkpoints/toy.pt \
+  --device cpu --steps 20 \
+  --embed-dim 16 --heads 2 --layers 1 --feedforward-dim 32 \
+  --context-length 32 --dropout 0
+```
+
+Repeat the same command with `--resume checkpoints/toy.pt` to run **20 additional
+steps**. Use `python train.py --help` for batch size, learning rate, clipping,
+weight decay, seed, validation fraction, and model options. The full default
+text configuration uses width 64, two layers, and context length 128.
+
+For your own data, supply a UTF-8 JSONL manifest with exactly these fields:
+
+```json
+{"path": "documents/example.txt", "source": "your source URL or dataset identifier", "license": "your applicable license"}
+```
+
+Paths are relative to the manifest (absolute paths also work). Supply at least
+two unique documents so that both splits are nonempty. Source and license
+fields are required; you are responsible for verifying permission to train on
+the content. This is an in-memory research pipeline, not a streaming web-scale
+loader. Exact deduplication does not detect near-duplicates or semantic leakage.
+
+Each step prints JSON metrics for task and auxiliary losses. Validation reports
+token-weighted task cross-entropy, perplexity including EOS, byte-target-only
+perplexity, and bits per byte computed only on byte targets. Auxiliary losses
+are separate; no environmental metric is fabricated for text (`lambda_iso=0`).
+Different tokenizations do not have directly comparable perplexities.
+
+[checkpoints.py](./checkpoints.py) atomically saves model/encoder/AdamW state,
+tokenizer/root and architecture configuration, document provenance/hashes,
+corpus/split/window fingerprints, step/data position, and Python/NumPy/PyTorch
+RNG states. Resume requires matching configurations, datasets, device type,
+and runtime library versions; it restores data order and dropout RNG state.
+CPU exact continuation is tested. Matching accelerator execution and numerical
+determinism remain unverified without hardware. Only load trusted checkpoints,
+even though restricted `weights_only=True` loading is used. Checkpoints and
+downloaded datasets are excluded from source control.
+
+No pretrained weights or useful conversation capability are implied. The toy
+corpus and tiny-corpus overfit check validate the pipeline, not generalization.
 
 ### Unit Tests
 
@@ -159,10 +216,12 @@ python -m pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-The Phase 1-2 suite covers Unicode round trips, configuration validation/persistence,
+The Phase 1-3 suite covers Unicode round trips, configuration validation/persistence,
 all token-to-root mappings, invalid inputs, legacy objective equivalence,
 device selection, dtype propagation, model gradients, causal isolation,
-prefix-dependent learning, masked losses, and contextual state reload. Accelerator checks
+prefix-dependent learning, masked losses, contextual state reload, document
+splits/windowing, training, token-weighted metrics, checkpoint corruption,
+exact CPU resume, and the training CLI. Accelerator checks
 are skipped explicitly when hardware is unavailable. NumPy is included in each
 runtime requirements variant; the experimental older DirectML stack uses NumPy
 below 2 for compatibility.

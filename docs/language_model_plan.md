@@ -2,7 +2,7 @@
 
 Date: 2026-10-22
 
-Status: Phases 1-2 implemented and validated; Phases 3-6 remain pending.
+Status: Phases 1-3 implemented and validated; Phases 4-6 remain pending.
 
 ## Implementation Progress
 
@@ -10,7 +10,7 @@ Status: Phases 1-2 implemented and validated; Phases 3-6 remain pending.
 | --- | --- | --- |
 | P1: Text encoding and compatibility | Complete | `text_encoding.py`, class-owned synthetic example, and 59 passing unit tests |
 | P2: Causal context | Complete | Opt-in PyTorch causal stack; masking, gradients, causality, and prefix-learning checks |
-| P3: Language training/checkpoints | Pending | Synthetic example only |
+| P3: Language training/checkpoints | Complete | Licensed local corpus pipeline, next-token trainer/CLI, validation metrics, atomic checkpoint resume |
 | P4: Generation | Pending | No generation loop |
 | P5: Conversation training | Pending | Reserved role IDs only; no conversation pipeline |
 | P6: Comparative evaluation | Pending | No language-quality results claimed |
@@ -60,7 +60,49 @@ Status: Phases 1-2 implemented and validated; Phases 3-6 remain pending.
   text-to-context example passed. All Python files parse with Python 3.9 syntax;
   runtime validation was on Python 3.12, not every supported interpreter.
 - Next task: T006 (licensed local corpus preparation and shifted batches),
-  followed by T007-T008 and the P3 training/checkpoint acceptance gate.
+  followed by T007-T008; these are now completed below.
+
+### Phase 3 validation (2026-10-22)
+
+- Added failing tests before implementing `training_data.py`, `train.py`, and
+  `checkpoints.py`. Reused NumPy splitting, PyTorch Dataset/DataLoader,
+  `pad_sequence`, AdamW, clipping, and restricted checkpoint serialization;
+  no new dependency was necessary.
+- Corpus manifests require local UTF-8 document paths, sources, and license
+  declarations. Exact-byte hashes deduplicate documents before splitting and
+  retain all distinct provenance records. Checkpoints retain provenance and
+  split fingerprints, without copying document text into metadata.
+- Windowing supervises each next token exactly once, shares only the predecessor
+  at boundaries, and inserts BOS/EOS only at actual document boundaries.
+- The fixed tiny-corpus acceptance run used the original text `abab`, seed 12,
+  200 AdamW steps, dropout 0, width 16, one layer/two heads, 12,343 parameters,
+  and no consensus loss. Task cross-entropy fell from **5.69925** to
+  **0.000143 nats/token**, below the required 0.1 threshold.
+  The initial multi-document fixture had conflicting first-token targets at
+  BOS, so it could not satisfy an almost-zero-loss gate; the mechanics gate
+  uses a deterministic document instead. This is not a generalization result.
+- Evaluation uses supervised-token-weighted task loss, separate auxiliary
+  losses, all-target perplexity, byte-only perplexity, and byte-only bits per
+  byte. It restores the model's previous mode and rejects evaluations without
+  byte targets rather than reporting undefined metrics.
+- Exact CPU continuation is checked across optimizer steps, epoch/batch
+  boundaries, dropout, and Python/NumPy/PyTorch RNG states. Corrupt/incompatible
+  metadata, state tensors, mappings, optimizer moments, and dataset order are
+  rejected before model mutation. Failed checkpoint writes preserve the
+  previous artifact and clean their temporary files.
+- Ran the actual CLI on `examples/toy_corpus/manifest.jsonl` for three steps and
+  resumed for two additional steps; final step was 5 with finite held-out
+  metrics. Temporary checkpoints were removed after validation.
+- Pylance reported no diagnostics in the three new implementation modules.
+  Tests also cover CLI parsing, serialization, reproducible initialization,
+  seeded data order, invalid inputs, and device-aware training/resume.
+- Final full suite: `.venv/bin/python -m pytest -q` yielded **155 passed,
+  12 skipped** (CUDA/XPU unavailable). `git diff --check`, local documentation
+  links/code fences, and Python 3.9 syntax parsing passed. All Python source
+  and test files are below 600 lines; runtime execution used Python 3.12 and
+  PyTorch 2.14.1+cpu. Older runtime/accelerator execution remains unverified.
+- Next task: T009, autoregressive generation backed by the saved model format,
+  followed by T010 and the P4 stopping/decoding acceptance gate.
 
 ## Goal and Scope
 
@@ -141,7 +183,8 @@ in their existing separate requirements files.
 
 Phase 1 adds NumPy runtime and pytest development requirements, text encoding,
 and a compatibility-preserving class refactor. Phase 2 adds opt-in contextual
-processing and padding-aware losses. Other proposed paths/interfaces remain
+processing and padding-aware losses. Phase 3 adds the local corpus, training,
+and checkpoint modules. Other proposed paths/interfaces remain
 future work. Every subsequent phase requires unit tests, targeted
 validation, and a progress entry before tasks are marked complete.
 
@@ -226,9 +269,22 @@ all-padding, overlength, or incompatible-shape inputs with clear errors.
 
 Requirements: REQ-003, REQ-006, REQ-007. Prerequisites: P1, P2.
 
-- [ ] T006 [Plan:P3] Add `CorpusPreparer`, `TextDataset`, and `CausalBatchCollator` in `training_data.py` to read licensed local documents, record source/license/content hashes, split and deduplicate by document before windowing, insert BOS/EOS, and produce right-padded shifted input/target batches.
-- [ ] T007 [Plan:P3] Add `TrainingConfig`, `LanguageModelTrainer`, and `TrainingApplication` in `train.py` with seeded initialization/data order, AdamW, configurable batch size/steps, gradient clipping, token-weighted validation loss, and separate logging of task/metric/consensus losses. Refuse batches with zero supervised targets.
-- [ ] T008 [Plan:P3] Add `CheckpointManager` in `checkpoints.py` to save model/optimizer state, architecture and tokenizer/root configurations, progress, RNG states, corpus/split fingerprints, and format version. Reject incompatible artifacts; load only trusted checkpoints.
+- [x] T006 [Plan:P3] Add `CorpusPreparer`, `TextDataset`, and `CausalBatchCollator` in `training_data.py` to read licensed local documents, record source/license/content hashes, split and deduplicate by document before windowing, insert BOS/EOS, and produce right-padded shifted input/target batches.
+- [x] T007 [Plan:P3] Add `TrainingConfig`, `LanguageModelTrainer`, and `TrainingApplication` in `train.py` with seeded initialization/data order, AdamW, configurable batch size/steps, gradient clipping, token-weighted validation loss, and separate logging of task/metric/consensus losses. Refuse batches with zero supervised targets.
+- [x] T008 [Plan:P3] Add `CheckpointManager` in `checkpoints.py` to save model/optimizer state, architecture and tokenizer/root configurations, progress, RNG states, corpus/split fingerprints, and format version. Reject incompatible artifacts; load only trusted checkpoints.
+
+Implemented interfaces: `CorpusPreparer.prepare(manifest)` returns train and
+validation document records plus a fingerprint; `TextDataset` materializes
+tokenized local documents and window offsets; `CausalBatchCollator` shifts once.
+`LanguageModelTrainer.create(...)` seeds initialization and composes the model,
+encoder, collator, and AdamW optimizer. `fit(steps)` returns step history;
+`iter_steps(steps)` streams it for the CLI without unbounded history retention.
+Both count additional optimizer steps. `evaluate()` defaults to the held-out
+dataset. `CheckpointManager.save/load(path, trainer)` writes/restores version 1
+artifacts; resume derives epoch and batch offset from step, batch size, and
+dataset fingerprints. Resume requires matching configs, device type, runtime
+versions, and saved accelerator RNG hardware; cross-device checkpoint transfer
+is not a resume feature. Checkpoints must be trusted.
 
 For a token stream `s`, use inputs `s[:-1]` and targets `s[1:]`; shift exactly
 once in data preparation, not again in the model. Use `-100` for ignored target
@@ -310,8 +366,9 @@ in agreement loss alone is not a success criterion.
 
 ## Proposed File Layout
 
-`text_encoding.py`, `sequence_model.py`, `uira.py`, and the Phase 1-2 unit tests
-now exist. The remaining language-model modules below are proposed:
+`text_encoding.py`, `sequence_model.py`, `training_data.py`, `train.py`,
+`checkpoints.py`, `uira.py`, and the Phase 1-3 unit tests now exist. The generation
+and comparative-evaluation modules below remain proposed:
 
 ```text
 uira.py                 existing core + opt-in contextual composition

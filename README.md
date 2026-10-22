@@ -414,9 +414,3 @@ if __name__ == "__main__":
 | Can UIRA learn contextual language behavior? | Not implemented | Causal sequence model, real training data, held-out next-token evaluation, and generation |
 
 No comparative advantage over Transformers or deployed language models has been established.
-
-### Optional External Data: Katzilla
-
-[Katzilla](https://katzilla.dev/) advertises structured access to public datasets with citation and freshness metadata. It could support a future, versioned research dataset or evidence-retrieval application, but it is not required for the language-model roadmap and is not a truth-verification component.
-
-Start with one well-defined dataset, compare direct upstream access with Katzilla, and cache licensed snapshots with provenance outside model `forward` methods. Define the observation-to-root encoding and environmental metric before training. Public documentation was reviewed, but authenticated API behavior, reliability, and dataset-specific storage/training permissions have not been verified.

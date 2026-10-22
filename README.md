@@ -23,11 +23,19 @@
 | **Paradigm** ⚙️ | Isomorphic Embedding & Hypergraphs |
 | **Status** 🧪 | Runnable synthetic prototype; capabilities not benchmarked |
 | **Audio Theme** 🎵 | [Suno AI Track](https://suno.com/s/SJpCZBfVr9DHxJFy?utm_source=gemini) |
-| **Reference Architecture** 🔗 | [Architecture Diagram](https://github.com/user-attachments/assets/3f2a8d07-ebeb-4042-9b16-d4d9f0815476?utm_source=gemini)
+| **Architecture** 🔗 | [Current implementation](./docs/architecture.md) |
 
 ---
 
 </div>
+
+### Reference Architecture Image
+
+![UIRA conceptual reference architecture](https://github.com/user-attachments/assets/3f2a8d07-ebeb-4042-9b16-d4d9f0815476?utm_source=gemini)
+
+This is the original conceptual reference image, not a verified map of implemented
+capabilities. See the [architecture documentation](./docs/architecture.md) for
+the current components, tensor flow, training pipeline, and limitations.
 
 ### 📜 Abstract & Theoretical Foundation
 

@@ -24,6 +24,7 @@
 | **Status** 🧪 | Runnable synthetic prototype; capabilities not benchmarked |
 | **Audio Theme** 🎵 | [Suno AI Track](https://suno.com/s/SJpCZBfVr9DHxJFy?utm_source=gemini) |
 | **Architecture** 🔗 | [Current implementation](./docs/architecture.md) |
+| **Media** | [Infographics and diagrams](./media/) |
 
 ---
 
@@ -36,6 +37,25 @@
 This is the original conceptual reference image, not a verified map of implemented
 capabilities. See the [architecture documentation](./docs/architecture.md) for
 the current components, tensor flow, training pipeline, and limitations.
+
+### Infographic Image Map
+
+Browse the [media folder](./media/) or select a thumbnail below to open the
+full-size infographic. These illustrations are reference material; the
+[architecture documentation](./docs/architecture.md) describes implemented
+behavior and limitations.
+
+| Architecture overview | System architecture | Universal representation |
+| :---: | :---: | :---: |
+| [![UIRA architecture overview](./media/UIRA_Architecture_Diagram_Overview.png)](./media/UIRA_Architecture_Diagram_Overview.png) | [![UIRA architecture system diagram](./media/UIRA_Architecture_System_Diagram.png)](./media/UIRA_Architecture_System_Diagram.png) | [![Universal Isomorphic Representation Architecture](./media/Universal_Isomorphic_Representation_Architecture.png)](./media/Universal_Isomorphic_Representation_Architecture.png) |
+
+| System data flow | Tokenization and root encoding | Causal sequence processor |
+| :---: | :---: | :---: |
+| [![System architecture and data flow](./media/System_Architecture_Data_Flow_Diagram.png)](./media/System_Architecture_Data_Flow_Diagram.png) | [![Tokenization and root encoding architecture](./media/Tokenization_and_Root_Encoding_Architecture.png)](./media/Tokenization_and_Root_Encoding_Architecture.png) | [![Causal sequence processor architecture and forward pass](./media/CausalSequenceProcessor_Architecture_Forward_Pass.png)](./media/CausalSequenceProcessor_Architecture_Forward_Pass.png) |
+
+| Data preparation and batching | Language-model training | Checkpoint management |
+| :---: | :---: | :---: |
+| [![Data preparation and causal batching pipeline](./media/Data_Preparation_Causal_Batching_Pipeline.png)](./media/Data_Preparation_Causal_Batching_Pipeline.png) | [![Language-model training pipeline](./media/Language_Model_Training_Pipeline_Diagram.png)](./media/Language_Model_Training_Pipeline_Diagram.png) | [![Machine-learning checkpoint manager](./media/Machine_Learning_Checkpoint_Manager_Diagram.png)](./media/Machine_Learning_Checkpoint_Manager_Diagram.png) |
 
 ### 📜 Abstract & Theoretical Foundation
 
